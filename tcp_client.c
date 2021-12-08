@@ -8,17 +8,15 @@
 #include <unistd.h>
 
 #define SIZE 1024
-#define PORT_NUMBER atoi(argv[1])
 #define LOCAL_HOST "127.0.0.1"
-#define REQUEST "developer.txt"
 #define NOFILE "File not found"
 #define ACK "Acknwoledge"
 
-void init_setup(int argc, char **argv)
+void init_setup(int argc, char *argv[])
 {
-	if (argc < 2)
+	if (argc < 3)
 		exit(-1);
-	if (PORT_NUMBER < 1023) {
+	if (atoi(argv[1]) < 1023) {
 		printf("Well known port selected. Not allowed! exiting ...\n");
 		exit(-1);
 	}
@@ -53,6 +51,7 @@ void recv_file(int sockfd)
 int main(int argc, char *argv[]) 
 {
 	init_setup(argc, argv);
+	char *req = argv[2];
 	int server_socket = 0, ret = 0;
 	char buff[SIZE];
 	struct sockaddr_in server_address;
@@ -66,7 +65,7 @@ int main(int argc, char *argv[])
 	
 	/* address for the socket */
 	server_address.sin_family = AF_INET;
-	server_address.sin_port = htons(PORT_NUMBER);    //understands data from port number 
+	server_address.sin_port = htons(atoi(argv[1]));    //understands data from port number 
 	server_address.sin_addr.s_addr = inet_addr(LOCAL_HOST);
 	
 	ret = connect(server_socket, (struct sockaddr* ) &server_address, sizeof(server_address));
@@ -75,22 +74,22 @@ int main(int argc, char *argv[])
 		exit(-1);
 	}
 	
-	ret = send(server_socket, REQUEST, sizeof(REQUEST), 0);    //request to server
+	ret = send(server_socket, req, strlen(req), 0);    //send REQ to server
 	if (ret == -1) {
 		perror("send request error");
 		exit(-1);
 	}
 	
-	ret = recv(server_socket, &buff, sizeof(buff), 0);
+	ret = recv(server_socket, &buff, sizeof(buff), 0);    //recieve RDY if file is available or not
 	if (ret == -1) {
 		perror("recv files available error");
 		exit(-1);
 	}
 	
 	if (strcmp(buff, NOFILE) == 0)
-		printf("%s\n", NOFILE);
+		printf("%s\n", buff); 
 	else {
-		ret = send(server_socket, ACK, sizeof(ACK), 0);
+		ret = send(server_socket, ACK, sizeof(ACK), 0);    //send ACK, ready to receive file
 		if (ret == -1) {
 			perror("send ACK error");
 			exit(-1);
