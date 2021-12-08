@@ -12,6 +12,7 @@
 #define LOCAL_HOST "127.0.0.1"
 #define REQUEST "developer.txt"
 #define NOFILE "File not found"
+#define ACK "Acknwoledge"
 
 void init_setup(int argc, char **argv)
 {
@@ -37,7 +38,7 @@ void recv_file(int sockfd)
 	FILE *fp;
 	int bytes_recv = 0;
 	char recv_buffer[SIZE];
-	memset(recv_buffer, '0', sizeof(recv_buffer));
+	memset(recv_buffer, 0, sizeof(recv_buffer));
 	
 	fp = fopen("received_file.txt", "ab");
 	if (fp == NULL) {
@@ -63,6 +64,7 @@ int main(int argc, char *argv[])
 	int checker = 0;
 	char buff[SIZE];
 	struct sockaddr_in server_address;
+	memset(buff, 0, sizeof(buff));
 	
 	client_socket = socket(AF_INET, SOCK_STREAM, 0);
 	check(client_socket);
@@ -77,18 +79,15 @@ int main(int argc, char *argv[])
 	
 	/* send request to server */
 	checker = send(client_socket, REQUEST, sizeof(REQUEST), 0);
-	check(checker);
-	
-	//checker = recv(client_socket, &buff, sizeof(buff), 0);
-	/*if (strcmp(buff, NOFILE) == 0) {
+	//check(checker);
+	checker = recv(client_socket, &buff, sizeof(buff), 0);
+	if (strcmp(buff, NOFILE) == 0) 
 		printf("%s\n", NOFILE);
-		bzero(buff, SIZE);
-	}
 	else {
-		bzero(buff, SIZE);
+		send(client_socket, ACK, sizeof(ACK), 0);
 		recv_file(client_socket);
-	}*/
-	recv_file(client_socket);
-	close(client_socket);	
+	}
+	
+	close(client_socket);
 	return 0;
 }
