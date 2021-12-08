@@ -8,7 +8,6 @@
 #include <unistd.h>
 
 #define SIZE 1024
-#define PORT_NUMBER atoi(argv[1])
 #define LOCAL_HOST "127.0.0.1"
 #define READY "developer.txt"
 #define NOFILE "File not found"
@@ -18,7 +17,7 @@ void init_setup(int argc, char *argv[])
 {
 	if (argc < 2)
 		exit(-1);
-	if (PORT_NUMBER < 1023) {
+	if (atoi(argv[1]) < 1023) {
 		printf("Well known port selected. Not allowed! exiting ...\n");
 		exit(-1);
 	}
@@ -71,7 +70,7 @@ int main(int argc, char *argv[])
 	
 	/* server address */
 	server_address.sin_family = AF_INET;
-	server_address.sin_port = htons(PORT_NUMBER);    //understands data from port number 
+	server_address.sin_port = htons(atoi(argv[1]));    //understands data from port number 
 	server_address.sin_addr.s_addr = inet_addr(LOCAL_HOST);
 
 	/* bind to specified IP and port */
