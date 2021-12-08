@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
 	}
 	
 	if (strcmp(buff, NOFILE) == 0)
-		printf("%s\n", buff); 
+		printf("%s\n", buff);
 	else {
 		ret = send(server_socket, ACK, sizeof(ACK), 0);    //send ACK, ready to receive file
 		if (ret == -1) {
