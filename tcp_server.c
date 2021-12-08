@@ -47,10 +47,8 @@ void send_file(int socketfd)
 	while (1) {
 		nread = fread(data, 1, SIZE, fp); 
 		printf("Bytes read %d \n", nread);
-		if (nread > 0) {
-			printf("Sending \n");
-			write(socketfd, data, nread);
-		}
+		if (nread > 0)
+			write(socketfd, &data, nread);
 		
 		if (nread < SIZE) {
 			if (feof(fp))
@@ -59,7 +57,6 @@ void send_file(int socketfd)
 				printf("Error reading\n");
 			break;
 		}
-		bzero(data, SIZE);
 	}
 }
 
@@ -73,7 +70,8 @@ int main(int argc, char *argv[])
 	
 	server_socket = socket(AF_INET, SOCK_STREAM, 0);
 	check(server_socket);
-	memset(&server_address, '0', sizeof(server_address));
+	memset(&server_address, 0, sizeof(server_address));
+	memset(buff_req, 0, sizeof(buff_req));
 	
 	/* server address */
 	server_address.sin_family = AF_INET;
@@ -95,15 +93,15 @@ int main(int argc, char *argv[])
 		printf("Request from client: %s\n", buff_req);
 		
 		if (strcmp(buff_req, READY) == 0) {
-			//send(client_socket, YESFILE, sizeof(YESFILE), 0);
+			send(client_socket, &YESFILE, sizeof(YESFILE), 0);
+			recv(client_socket, &buff_req, sizeof(buff_req), 0);
+			printf("%s!\n",buff_req);
 			send_file(client_socket);
-			close(client_socket);
-			printf("File sent!\n");
-		}
-		/*else {
-			send(client_socket, NOFILE, sizeof(NOFILE), 0);
+		} else {
+			send(client_socket, &NOFILE, sizeof(NOFILE), 0);
 			printf("%s\n", NOFILE);
-		}*/
+		}
+		close(client_socket);
 	}
 	
 	close(server_socket);
