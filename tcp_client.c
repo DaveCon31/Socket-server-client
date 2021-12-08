@@ -17,20 +17,12 @@
 void init_setup(int argc, char **argv)
 {
 	if (argc < 2)
-		exit(1);
+		exit(-1);
 	if (PORT_NUMBER < 1023) {
 		printf("Well known port selected. Not allowed! exiting ...\n");
-		exit(1);
+		exit(-1);
 	}
 	return;
-}
-
-void check(int e)
-{
-	if (e == -1) {
-		perror("Error");
-		exit(1);
-	}
 }
 
 void recv_file(int sockfd)
@@ -53,41 +45,59 @@ void recv_file(int sockfd)
 	
 	if (bytes_recv < 0)
 		perror("Read error");
-	//fclose(fp);
+		
+	fclose(fp);
 	return;
 }
 
 int main(int argc, char *argv[]) 
 {
 	init_setup(argc, argv);
-	int client_socket = 0;
-	int checker = 0;
+	int server_socket = 0, ret = 0;
 	char buff[SIZE];
 	struct sockaddr_in server_address;
 	memset(buff, 0, sizeof(buff));
 	
-	client_socket = socket(AF_INET, SOCK_STREAM, 0);
-	check(client_socket);
+	server_socket = socket(AF_INET, SOCK_STREAM, 0);
+	if (server_socket == -1) {
+		perror("Server socket creation error");
+		exit(-1);
+	}
 	
 	/* address for the socket */
 	server_address.sin_family = AF_INET;
 	server_address.sin_port = htons(PORT_NUMBER);    //understands data from port number 
 	server_address.sin_addr.s_addr = inet_addr(LOCAL_HOST);
 	
-	checker = connect(client_socket, (struct sockaddr* ) &server_address, sizeof(server_address));
-	check(checker);
-	
-	/* send request to server */
-	checker = send(client_socket, REQUEST, sizeof(REQUEST), 0);
-	//check(checker);
-	checker = recv(client_socket, &buff, sizeof(buff), 0);
-	if (strcmp(buff, NOFILE) == 0) 
-		printf("%s\n", NOFILE);
-	else {
-		send(client_socket, ACK, sizeof(ACK), 0);
-		recv_file(client_socket);
+	ret = connect(server_socket, (struct sockaddr* ) &server_address, sizeof(server_address));
+	if (ret == -1) {
+		perror("Connect error");
+		exit(-1);
 	}
 	
-	close(client_socket);
+	ret = send(server_socket, REQUEST, sizeof(REQUEST), 0);    //request to server
+	if (ret == -1) {
+		perror("send request error");
+		exit(-1);
+	}
+	
+	ret = recv(server_socket, &buff, sizeof(buff), 0);
+	if (ret == -1) {
+		perror("recv files available error");
+		exit(-1);
+	}
+	
+	if (strcmp(buff, NOFILE) == 0)
+		printf("%s\n", NOFILE);
+	else {
+		ret = send(server_socket, ACK, sizeof(ACK), 0);
+		if (ret == -1) {
+			perror("send ACK error");
+			exit(-1);
+		}
+		recv_file(server_socket);
+	}
+	
+	close(server_socket);
 	return 0;
 }
