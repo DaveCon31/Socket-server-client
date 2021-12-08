@@ -17,18 +17,10 @@
 void init_setup(int argc, char *argv[])
 {
 	if (argc < 2)
-		exit(1);
+		exit(-1);
 	if (PORT_NUMBER < 1023) {
 		printf("Well known port selected. Not allowed! exiting ...\n");
-		exit(1);
-	}
-}
-
-void check(int e)
-{
-	if (e == -1) {
-		perror("Error");
-		exit(1);
+		exit(-1);
 	}
 }
 
@@ -58,40 +50,55 @@ void send_file(int socketfd)
 			break;
 		}
 	}
+	fclose(fp);
+	return;
 }
 
 int main(int argc, char *argv[])
 {	
 	init_setup(argc, argv);
 	char buff_req[SIZE];
-	int server_socket = 0, checker = 0;
-	int client_socket = 0;
+	int server_socket = 0, client_socket = 0, ret = 0;
 	struct sockaddr_in server_address;
-	
-	server_socket = socket(AF_INET, SOCK_STREAM, 0);
-	check(server_socket);
 	memset(&server_address, 0, sizeof(server_address));
 	memset(buff_req, 0, sizeof(buff_req));
+
+	server_socket = socket(AF_INET, SOCK_STREAM, 0);
+	if (server_socket == -1) {
+		perror("Server socket creation error");
+		exit(-1);
+	}
 	
 	/* server address */
 	server_address.sin_family = AF_INET;
 	server_address.sin_port = htons(PORT_NUMBER);    //understands data from port number 
 	server_address.sin_addr.s_addr = inet_addr(LOCAL_HOST);
-	
+
 	/* bind to specified IP and port */
-	checker = bind(server_socket, (struct sockaddr*) &server_address, sizeof(server_address));
-	check(checker);
-	
-	checker = listen(server_socket, 10);
-	check(checker);
+	ret = bind(server_socket, (struct sockaddr*) &server_address, sizeof(server_address));
+	if (ret == -1) {
+		perror("bind error");
+		exit(-1);
+	}
+		
+	ret = listen(server_socket, 10);
+	if (ret == -1) {
+		perror("listen error");
+		exit(-1);
+	}
 	
 	while (1) {
 		client_socket = accept(server_socket, NULL, NULL);
-		checker = recv(client_socket, &buff_req, sizeof(buff_req), 0);
-		if (checker == -1)
-			perror("Receiving request error");
-		printf("Request from client: %s\n", buff_req);
+		if (client_socket == -1) {
+			perror("accept error");
+			exit(-1);
+		}
 		
+		ret = recv(client_socket, &buff_req, sizeof(buff_req), 0);
+		if (ret == -1)
+			perror("Receiving request error");
+			
+		printf("Request from client: %s\n", buff_req);
 		if (strcmp(buff_req, READY) == 0) {
 			send(client_socket, &YESFILE, sizeof(YESFILE), 0);
 			recv(client_socket, &buff_req, sizeof(buff_req), 0);
