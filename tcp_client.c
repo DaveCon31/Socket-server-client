@@ -23,13 +23,40 @@ void init_setup(int argc, char *argv[])
 	return;
 }
 
+int socket_creation(void)
+{
+	int s = socket(AF_INET, SOCK_STREAM, 0);
+	if (s == -1) {
+		perror("Server socket creation error");
+		exit(-1);
+	}
+	return s;
+}
+
+void socket_client_config(int sockfd, int port_number)
+{
+	int ret = 0;
+	struct sockaddr_in server_address;
+	memset(&server_address, 0, sizeof(server_address));
+
+	server_address.sin_family = AF_INET;
+	server_address.sin_port = htons(port_number);    //understands data from port number 
+	server_address.sin_addr.s_addr = inet_addr(LOCAL_HOST);
+	
+	ret = connect(sockfd, (struct sockaddr* ) &server_address, sizeof(server_address));
+	if (ret == -1) {
+		perror("Connect error");
+		exit(-1);
+	}
+}
+
 void recv_file(int sockfd)
 {
 	FILE *fp;
 	int bytes_recv = 0;
 	char recv_buffer[SIZE];
 	memset(recv_buffer, 0, sizeof(recv_buffer));
-	
+
 	fp = fopen("received_file.txt", "ab");
 	if (fp == NULL) {
 		perror("File descriptor error");
@@ -48,39 +75,19 @@ void recv_file(int sockfd)
 	return;
 }
 
-int main(int argc, char *argv[]) 
+void file_transfer(int sockfd, char *req)
 {
-	init_setup(argc, argv);
-	char *req = argv[2];
-	int server_socket = 0, ret = 0;
+	int ret = 0;
 	char buff[SIZE];
-	struct sockaddr_in server_address;
 	memset(buff, 0, sizeof(buff));
 	
-	server_socket = socket(AF_INET, SOCK_STREAM, 0);
-	if (server_socket == -1) {
-		perror("Server socket creation error");
-		exit(-1);
-	}
-	
-	/* address for the socket */
-	server_address.sin_family = AF_INET;
-	server_address.sin_port = htons(atoi(argv[1]));    //understands data from port number 
-	server_address.sin_addr.s_addr = inet_addr(LOCAL_HOST);
-	
-	ret = connect(server_socket, (struct sockaddr* ) &server_address, sizeof(server_address));
-	if (ret == -1) {
-		perror("Connect error");
-		exit(-1);
-	}
-	
-	ret = send(server_socket, req, strlen(req), 0);    //send REQ to server
+	ret = send(sockfd, req, strlen(req), 0);    //send REQ to server
 	if (ret == -1) {
 		perror("send request error");
 		exit(-1);
 	}
 	
-	ret = recv(server_socket, &buff, sizeof(buff), 0);    //recieve RDY if file is available or not
+	ret = recv(sockfd, &buff, sizeof(buff), 0);    //recieve RDY if file is available or not
 	if (ret == -1) {
 		perror("recv files available error");
 		exit(-1);
@@ -89,14 +96,24 @@ int main(int argc, char *argv[])
 	if (strcmp(buff, NOFILE) == 0)
 		printf("%s\n", buff);
 	else {
-		ret = send(server_socket, ACK, sizeof(ACK), 0);    //send ACK, ready to receive file
+		ret = send(sockfd, ACK, sizeof(ACK), 0);    //send ACK, ready to receive file
 		if (ret == -1) {
 			perror("send ACK error");
 			exit(-1);
 		}
-		recv_file(server_socket);
+		recv_file(sockfd);
 	}
+}
+
+int main(int argc, char *argv[]) 
+{
+	init_setup(argc, argv);
+	int server_socket = 0;
 	
+	server_socket = socket_creation();
+	socket_client_config(server_socket, atoi(argv[1]));
+	
+	file_transfer(server_socket, argv[2]);
 	close(server_socket);
 	return 0;
 }
