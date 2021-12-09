@@ -22,6 +22,40 @@ void init_setup(int argc, char *argv[])
 	}
 }
 
+int socket_creation(void)
+{
+	int s = socket(AF_INET, SOCK_STREAM, 0);
+	if (s == -1) {
+		perror("Server socket creation error");
+		exit(-1);
+	}
+	return s;
+}
+
+void socket_server_config(int sockfd, int port_number)
+{
+	int ret = 0;
+	struct sockaddr_in server_address;
+	memset(&server_address, 0, sizeof(server_address));
+	
+	server_address.sin_family = AF_INET;
+	server_address.sin_port = htons(port_number);    //understands data from port number 
+	server_address.sin_addr.s_addr = inet_addr(LOCAL_HOST);
+
+	/* bind to specified IP and port */
+	ret = bind(sockfd, (struct sockaddr*) &server_address, sizeof(server_address));
+	if (ret == -1) {
+		perror("bind error");
+		exit(-1);
+	}
+	
+	ret = listen(sockfd, 10);
+	if (ret == -1) {
+		perror("listen error");
+		exit(-1);
+	}
+}
+
 void send_file(int sockfd, char *filename)
 {
 	FILE *fp;
@@ -30,7 +64,7 @@ void send_file(int sockfd, char *filename)
 	
 	fp = fopen(filename, "rb");
 	if (fp == NULL) {
-		perror("File descriptor error");
+		perror("");
 		send(sockfd, &NOFILE, sizeof(NOFILE), 0);
 		return;
 	}
@@ -58,41 +92,14 @@ void send_file(int sockfd, char *filename)
 	return;
 }
 
-int main(int argc, char *argv[])
-{	
-	init_setup(argc, argv);
+void file_transfer(int sockfd)
+{
+	int ret =0, client_socket = 0;
 	char buff_req[SIZE];
-	int server_socket = 0, client_socket = 0, ret = 0;
-	struct sockaddr_in server_address;
-	memset(&server_address, 0, sizeof(server_address));
 	memset(buff_req, 0, sizeof(buff_req));
-
-	server_socket = socket(AF_INET, SOCK_STREAM, 0);
-	if (server_socket == -1) {
-		perror("Server socket creation error");
-		exit(-1);
-	}
-	
-	/* server address */
-	server_address.sin_family = AF_INET;
-	server_address.sin_port = htons(atoi(argv[1]));    //understands data from port number 
-	server_address.sin_addr.s_addr = inet_addr(LOCAL_HOST);
-
-	/* bind to specified IP and port */
-	ret = bind(server_socket, (struct sockaddr*) &server_address, sizeof(server_address));
-	if (ret == -1) {
-		perror("bind error");
-		exit(-1);
-	}
-		
-	ret = listen(server_socket, 10);
-	if (ret == -1) {
-		perror("listen error");
-		exit(-1);
-	}
 	
 	while (1) {
-		client_socket = accept(server_socket, NULL, NULL);
+		client_socket = accept(sockfd, NULL, NULL);
 		if (client_socket == -1) {
 			perror("accept error");
 			exit(-1);
@@ -107,7 +114,17 @@ int main(int argc, char *argv[])
 		bzero(buff_req, SIZE);    //resetting the buffer
 		close(client_socket);
 	}
+}
+
+int main(int argc, char *argv[])
+{	
+	init_setup(argc, argv);
+	int server_socket = 0;
+
+	server_socket = socket_creation();
+	socket_server_config(server_socket, atoi(argv[1]));
 	
+	file_transfer(server_socket);
 	close(server_socket);
 	return 0;
 }
