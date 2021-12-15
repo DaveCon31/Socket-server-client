@@ -1,16 +1,23 @@
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <pthread.h>
+#include <errno.h>
+#include <signal.h>
 
 #define SIZE 1024
 #define LOCAL_HOST "127.0.0.1"
 #define NOFILE "File not found"
 #define YESFILE "Available"
+
+void handle_broken_pipe(int sig)
+{
+	printf("Broken pipe before writing to socket, signo:%d\n",sig);
+}
 
 void init_setup(int argc, char *argv[])
 {
@@ -77,9 +84,17 @@ void send_file(int sockfd, char *filename)
 	while (1) {
 		nread = fread(data, 1, SIZE, fp); 
 		printf("Bytes read %d \n", nread);
-		if (nread > 0)
-			write(sockfd, &data, nread);
-		
+		if (nread > 0) {
+			signal(SIGPIPE, handle_broken_pipe);
+			if (write(sockfd, &data, nread) == -1) {
+				perror("Error");
+				if (errno == ECONNRESET || errno == EPIPE) {
+					printf("Server: continue execution...\n");
+					break;
+				}
+			}
+		}
+
 		if (nread < SIZE) {
 			if (feof(fp))
 				printf("End of file\n");
@@ -92,11 +107,42 @@ void send_file(int sockfd, char *filename)
 	return;
 }
 
+void *socket_thread(void *p_client_socket)
+{
+	int ret = 0;
+	char buff_req[SIZE];
+	int client_socket = *((int*)p_client_socket);
+	free(p_client_socket);
+	p_client_socket = NULL;
+	
+	memset(buff_req, 0, sizeof(buff_req));
+	ret = recv(client_socket, &buff_req, sizeof(buff_req), 0);
+	if (ret == -1)
+		perror("Receiving request error");
+	printf("Request from client: %s\n", buff_req);
+	send_file(client_socket, buff_req);
+		
+	bzero(buff_req, SIZE);    //resetting the buffer
+	close(client_socket);
+	return NULL;
+}
+
+void handle_threads(int *client_socket)
+{
+	pthread_t t;
+	int *pclient = malloc(sizeof(int));
+	*pclient = *client_socket;
+	if (pthread_create(&t, NULL, socket_thread, pclient) != 0)
+		perror("Pthread create");
+
+	/* cleanup thread resources */
+	if (pthread_detach(t) != 0)
+		perror("Pthread detach");
+}
+
 void file_transfer(int sockfd)
 {
-	int ret =0, client_socket = 0;
-	char buff_req[SIZE];
-	memset(buff_req, 0, sizeof(buff_req));
+	int client_socket = 0;
 	
 	while (1) {
 		client_socket = accept(sockfd, NULL, NULL);
@@ -104,15 +150,7 @@ void file_transfer(int sockfd)
 			perror("accept error");
 			exit(-1);
 		}
-		
-		ret = recv(client_socket, &buff_req, sizeof(buff_req), 0);
-		if (ret == -1)
-			perror("Receiving request error");
-		printf("Request from client: %s\n", buff_req);
-		send_file(client_socket, buff_req);
-		
-		bzero(buff_req, SIZE);    //resetting the buffer
-		close(client_socket);
+		handle_threads(&client_socket);
 	}
 }
 
