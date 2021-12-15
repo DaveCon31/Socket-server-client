@@ -6,6 +6,7 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #define SIZE 1024
 #define LOCAL_HOST "127.0.0.1"
@@ -92,11 +93,40 @@ void send_file(int sockfd, char *filename)
 	return;
 }
 
+void *socket_thread(void *p_client_socket)
+{
+	int ret = 0;
+	char buff_req[SIZE];
+	int client_socket = *((int*)p_client_socket);
+	free(p_client_socket);
+	p_client_socket = NULL;
+	
+	memset(buff_req, 0, sizeof(buff_req));
+	ret = recv(client_socket, &buff_req, sizeof(buff_req), 0);
+	if (ret == -1)
+		perror("Receiving request error");
+	printf("Request from client: %s\n", buff_req);
+	send_file(client_socket, buff_req);
+		
+	bzero(buff_req, SIZE);    //resetting the buffer
+	close(client_socket);
+	return NULL;
+}
+
+void create_thread(int *client_socket)
+{
+	pthread_t t;
+	int *pclient = malloc(sizeof(int));
+	*pclient = *client_socket;
+	if (pthread_create(&t, NULL, socket_thread, pclient) != 0)
+		perror("Pthread create");
+	if (pthread_detach(t) != 0)
+		perror("Pthread detach");
+}
+
 void file_transfer(int sockfd)
 {
-	int ret =0, client_socket = 0;
-	char buff_req[SIZE];
-	memset(buff_req, 0, sizeof(buff_req));
+	int client_socket = 0;
 	
 	while (1) {
 		client_socket = accept(sockfd, NULL, NULL);
@@ -104,15 +134,7 @@ void file_transfer(int sockfd)
 			perror("accept error");
 			exit(-1);
 		}
-		
-		ret = recv(client_socket, &buff_req, sizeof(buff_req), 0);
-		if (ret == -1)
-			perror("Receiving request error");
-		printf("Request from client: %s\n", buff_req);
-		send_file(client_socket, buff_req);
-		
-		bzero(buff_req, SIZE);    //resetting the buffer
-		close(client_socket);
+		create_thread(&client_socket);
 	}
 }
 
