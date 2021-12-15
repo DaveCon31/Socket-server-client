@@ -13,6 +13,7 @@
 #define LOCAL_HOST "127.0.0.1"
 #define NOFILE "File not found"
 #define YESFILE "Available"
+#define THREAD_POOL_SIZE 10
 
 void handle_broken_pipe(int sig)
 {
