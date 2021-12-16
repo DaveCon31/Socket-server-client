@@ -19,7 +19,7 @@ typedef struct my_q {
 	pthread_mutex_t lock;
 } q_t;
 
-int validate_head(q_t *queue)    //VALIDATE HEAD and queue
+int validate_queue(q_t *queue)    //VALIDATE HEAD and queue
 {
 	if (queue == NULL)
 		return -1;
@@ -42,7 +42,7 @@ q_t *queue_create(void)
 	return queue;
 }
 
-void enqueue(q_t *queue, void *client_socket);
+void enqueue(q_t *queue, int client_socket)
 {			
 	Q_LOCK(queue);
 	node_t *new_node = malloc(sizeof(node_t));	
@@ -51,52 +51,39 @@ void enqueue(q_t *queue, void *client_socket);
 		Q_UNLOCK(queue);
 		return;
 	}
-	new_node->next = NULL;
 	new_node->val = client_socket;
+	new_node->next = queue->head;
+	queue->head = new_node;
 	
-	if (queue->head == NULL) {			
-		queue->head = new_node;    //set first node as head if linked list is empty
-	}
-	if (queue->tail != NULL) {   
-		queue->tail->next = new_node;    //link new_node with last node if linked list is not empty
-	}
-	
-	queue->tail = new_node;
+	if (queue->head == NULL)    //tail will be the first added node in queue
+		queue->tail = new_node;
 	Q_UNLOCK(queue);
 }
 
 void dequeue(q_t *queue)
 {
-	if (validate_head(queue) == -1)
+	if (validate_queue(queue) == -1)
 		return;
 	
 	Q_LOCK(queue);
 	node_t *temp = queue->head;
 	node_t *prev = NULL;
 	while (temp != NULL) {
-		if (queue->comparator(temp->val, client_socket) == 0) {
-			if (temp == queue->head)
-				queue->head = queue->head->next;
-			if (temp == queue->tail)
-				queue->tail = prev;
-			if (prev != NULL)
-				prev->next = temp->next;
-			break;
-		}
 		prev = temp;
 		temp = temp->next;
 	}
 	free(temp);
 	temp = NULL;
+	queue->tail = prev;
 	Q_UNLOCK(queue);
 }
 
 void flush_queue(q_t *queue)
 {
-	if (validate_head(queue) == -1)   //validate head list
+	if (validate_queue(queue) == -1)   //validate head list
 		return;
 	
-	LL_LOCK(queue);
+	Q_LOCK(queue);
 	node_t *temp = NULL;	
 	while (queue->head != NULL) {
 		temp = queue->head;
@@ -104,7 +91,22 @@ void flush_queue(q_t *queue)
 		free(temp);
 	}
 	queue->tail = NULL;
-	LL_UNLOCK(queue);
+	Q_UNLOCK(queue);
+}
+
+void print_queue(q_t *queue)
+{
+	if (validate_queue(queue) == -1)
+		return;
+	
+	node_t *temp = queue->head;
+	while (temp != NULL) {
+		printf("%d", temp->val);
+		temp = temp->next;
+		if (temp != NULL)
+			DEBUG_PRINTF(" ---> ");
+	}
+	DEBUG_PRINTF("\n");
 }
 
 void destroy_queue(q_t **queue)
