@@ -9,11 +9,16 @@
 #include <errno.h>
 #include <signal.h>
 
+#include "my_queue.h"
+
 #define SIZE 1024
 #define LOCAL_HOST "127.0.0.1"
 #define NOFILE "File not found"
 #define YESFILE "Available"
 #define THREAD_POOL_SIZE 10
+
+pthread_t thread_pool[THREAD_POOL_SIZE];
+q_t *q1;
 
 void handle_broken_pipe(int sig)
 {
@@ -115,7 +120,7 @@ void *socket_thread(void *p_client_socket)
 	int client_socket = *((int*)p_client_socket);
 	free(p_client_socket);
 	p_client_socket = NULL;
-	
+
 	memset(buff_req, 0, sizeof(buff_req));
 	ret = recv(client_socket, &buff_req, sizeof(buff_req), 0);
 	if (ret == -1)
@@ -128,17 +133,27 @@ void *socket_thread(void *p_client_socket)
 	return NULL;
 }
 
-void handle_threads(int *client_socket)
+void *thread_function(void* arg)
 {
-	pthread_t t;
+	while (1) {
+		int *pclient = dequeue(q1);
+		if (pclient != NULL)
+			socket_thread(pclient);
+	}
+}
+
+void handle_threads(int client_socket)
+{
+	//pthread_t t;
 	int *pclient = malloc(sizeof(int));
-	*pclient = *client_socket;
-	if (pthread_create(&t, NULL, socket_thread, pclient) != 0)
-		perror("Pthread create");
+	*pclient = client_socket;
+	//if (pthread_create(&t, NULL, socket_thread, pclient) != 0)
+		//perror("Pthread create");
+	enqueue(q1, pclient);
 
 	/* cleanup thread resources */
-	if (pthread_detach(t) != 0)
-		perror("Pthread detach");
+	//if (pthread_detach(t) != 0)
+		//perror("Pthread detach");
 }
 
 void file_transfer(int sockfd)
@@ -151,7 +166,7 @@ void file_transfer(int sockfd)
 			perror("accept error");
 			exit(-1);
 		}
-		handle_threads(&client_socket);
+		handle_threads(client_socket);
 	}
 }
 
@@ -159,7 +174,13 @@ int main(int argc, char *argv[])
 {	
 	init_setup(argc, argv);
 	int server_socket = 0;
+	int i = 0;
 
+	q1 = queue_create();
+	for (i=0; i< THREAD_POOL_SIZE; i++) {
+		pthread_create(&thread_pool[i], NULL, thread_function, NULL);
+	}
+	
 	server_socket = socket_creation();
 	socket_server_config(server_socket, atoi(argv[1]));
 	
