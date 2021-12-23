@@ -10,16 +10,10 @@
 #define DEBUG_PRINTF(...) printf(__VA_ARGS__)
 #endif
 
-#define Q_LOCK(qk) pthread_mutex_lock(&qk->lock)
-#define Q_UNLOCK(qk) pthread_mutex_unlock(&qk->lock)
-
 typedef struct my_q {
 	node_t *head;
 	node_t *tail;
-	pthread_mutex_t lock;
 } q_t;
-
-pthread_cond_t cond_var = PTHREAD_COND_INITIALIZER;
 
 int validate_queue(q_t *queue)    //VALIDATE HEAD and queue
 {
@@ -39,19 +33,14 @@ q_t *queue_create(void)
 	
 	queue->head = NULL;
 	queue->tail = NULL;
-	if (pthread_mutex_init(&queue->lock, NULL) != 0)
-		return NULL;
 	return queue;
 }
 
 void enqueue(q_t *queue, int *client_socket)
 {			
-	Q_LOCK(queue);
 	node_t *new_node = malloc(sizeof(node_t));	
 	if (new_node == NULL) {
 		DEBUG_PRINTF("Memory allocation for new_node failed! (add) \n");
-		pthread_cond_signal(&cond_var);
-		Q_UNLOCK(queue);
 		return;
 	}
 	new_node->val = client_socket;
@@ -60,16 +49,11 @@ void enqueue(q_t *queue, int *client_socket)
 	
 	if (queue->head == NULL)    //tail will be the first added node in queue
 		queue->tail = new_node;
-	pthread_cond_signal(&cond_var);
-	Q_UNLOCK(queue);
 }
 
 int* dequeue(q_t *queue)
 {
-	Q_LOCK(queue);
 	if (validate_queue(queue) == -1) {
-		pthread_cond_wait(&cond_var, &(queue->lock));
-		Q_UNLOCK(queue);
 		return NULL;
 	}
 	
@@ -89,15 +73,12 @@ int* dequeue(q_t *queue)
 	free(temp);
 	temp = NULL;
 	queue->tail = prev;
-	Q_UNLOCK(queue);
 	return result;
 }
 
 void flush_queue(q_t *queue)
 {
-	Q_LOCK(queue);
 	if (validate_queue(queue) == -1) {
-		Q_UNLOCK(queue);
 		return;
 	}
 	
@@ -108,14 +89,11 @@ void flush_queue(q_t *queue)
 		free(temp);
 	}
 	queue->tail = NULL;
-	Q_UNLOCK(queue);
 }
 
 void print_queue(q_t *queue)
 {
-	Q_LOCK(queue);
 	if (validate_queue(queue) == -1) {
-		Q_UNLOCK(queue);
 		return;
 	}
 	
@@ -132,8 +110,6 @@ void print_queue(q_t *queue)
 void destroy_queue(q_t **queue)
 {	
 	flush_queue(*queue);
-	if (pthread_mutex_destroy(&((*queue)->lock)) != 0)
-		return;
 	free(*queue);    //free list resources
 	(*queue) = NULL;
 }

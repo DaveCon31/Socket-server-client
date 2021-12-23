@@ -16,8 +16,17 @@
 #define NOFILE "File not found"
 #define YESFILE "Available"
 #define THREAD_POOL_SIZE 10
+#define CLIENTS_LIMIT 1000
+
+#define QLOCK pthread_mutex_lock(&mutex)
+#define QUNLOCK pthread_mutex_unlock(&mutex)
+#define COND_WAIT pthread_cond_wait(&cond, &mutex)
+#define COND_SIG pthread_cond_signal(&cond)
+#define BROAD pthread_cond_broadcast(&cond)
 
 pthread_t thread_pool[THREAD_POOL_SIZE];
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 q_t *q1;
 
 void handle_broken_pipe(int sig)
@@ -91,7 +100,6 @@ void send_file(int sockfd, char *filename)
 		nread = fread(data, 1, SIZE, fp); 
 		printf("Bytes read %d \n", nread);
 		if (nread > 0) {
-			signal(SIGPIPE, handle_broken_pipe);
 			if (write(sockfd, &data, nread) == -1) {
 				perror("Error");
 				if (errno == ECONNRESET || errno == EPIPE) {
@@ -113,7 +121,7 @@ void send_file(int sockfd, char *filename)
 	return;
 }
 
-void *socket_thread(void *p_client_socket)
+void *handle_connection(void *p_client_socket)
 {
 	int ret = 0;
 	char buff_req[SIZE];
@@ -135,56 +143,93 @@ void *socket_thread(void *p_client_socket)
 
 void *thread_function(void* arg)
 {
+	static int limit = 0;
+	int tid = *(int *)arg;
 	while (1) {
-		int *pclient = dequeue(q1);
-		if (pclient != NULL)
-			socket_thread(pclient);
+		int *pclient = NULL;
+		QLOCK;
+		printf("Thread no.%d joined thread_function\n", tid);
+		pclient = dequeue(q1);
+		if (pclient == NULL) {
+			printf("Thread no.%d WAITING ...\n", tid);
+			COND_WAIT;
+			pclient = dequeue(q1);
+			printf("Thread no.%d SIGNALED ...\n", tid);
+		}
+
+		if (pclient != NULL) {
+			limit++;
+			handle_connection(pclient);
+		}
+		QUNLOCK;
+
+		if (limit == CLIENTS_LIMIT) {
+			printf("Thread going to cleanup...");
+			free(arg);
+			break;
+		}
 	}
-}
-
-void handle_threads(int client_socket)
-{
-	//pthread_t t;
-	int *pclient = malloc(sizeof(int));
-	*pclient = client_socket;
-	//if (pthread_create(&t, NULL, socket_thread, pclient) != 0)
-		//perror("Pthread create");
-	enqueue(q1, pclient);
-
-	/* cleanup thread resources */
-	//if (pthread_detach(t) != 0)
-		//perror("Pthread detach");
+	return NULL;
 }
 
 void file_transfer(int sockfd)
 {
 	int client_socket = 0;
-	
+	int limit = 0;
 	while (1) {
 		client_socket = accept(sockfd, NULL, NULL);
 		if (client_socket == -1) {
 			perror("accept error");
 			exit(-1);
 		}
-		handle_threads(client_socket);
+		int *pclient = malloc(sizeof(int));
+		*pclient = client_socket;
+		limit++;
+		enqueue(q1, pclient);
+		COND_SIG;
+		if (limit == CLIENTS_LIMIT) {
+			//sleep(2);
+			return;
+		}
 	}
 }
 
+void create_threads(void) 
+{
+	int i = 0;
+	for (i=0; i< THREAD_POOL_SIZE; i++) {
+		int *a = malloc(sizeof(int)); 
+		*a = i+1;
+		pthread_create(&thread_pool[i], NULL, thread_function, a);
+	}
+}
+
+void cleanup_threads(void)
+{
+	int i = 0;
+	for (i=0; i< THREAD_POOL_SIZE; i++) {
+		BROAD;
+		if (pthread_join(thread_pool[i], NULL) != 0)
+			perror("pthread join");
+	}
+	printf("Pthread join DONE\n");
+}
+
 int main(int argc, char *argv[])
-{	
+{
 	init_setup(argc, argv);
 	int server_socket = 0;
-	int i = 0;
-
 	q1 = queue_create();
-	for (i=0; i< THREAD_POOL_SIZE; i++) {
-		pthread_create(&thread_pool[i], NULL, thread_function, NULL);
-	}
-	
 	server_socket = socket_creation();
 	socket_server_config(server_socket, atoi(argv[1]));
-	
-	file_transfer(server_socket);
+	signal(SIGPIPE, handle_broken_pipe);
+
+	create_threads();
+	file_transfer(server_socket);	
+	cleanup_threads();
+
 	close(server_socket);
+	destroy_queue(&q1);
+	printf("Ajungi mai aici?!\n");
 	return 0;
 }
